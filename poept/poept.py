@@ -144,7 +144,7 @@ class PoePT:
                 if lang_element and code_element:
                     lang_text = lang_element.text.strip()
                     code_text = code_element.text.strip()
-                    result.append(f"```{lang_text}\n{code_text}\n```")
+                    result.append(f"```\n{code_text}\n```")
             elif elementClass and elementClass.startswith('PreviewFrame_container'):
                 return
             elif element.tag_name == 'p':
