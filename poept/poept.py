@@ -38,7 +38,7 @@ go_key='//button[text()="Go"]'
 log_key=f"//button[contains(translate(., '{letters[0]}', '{letters[-1]}' ), 'log')]"
 clear_key="button[class*=ChatBreak]"
 stop_button_selector="button[class*=ChatStopMessageButton]"
-button_css_selector = "button[class*=SendButton]"
+button_css_selector = "button[aria-label='Send message']"
 textarea_css_selector =  "textarea[class*='GrowingTextArea_textArea']"
 
 
