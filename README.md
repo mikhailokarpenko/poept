@@ -49,16 +49,16 @@ pip install git+https://github.com/dzianisv/poept
 
 
 ## Usage
+
+### login
+
+Start a poept in a login mode by running `python3 -m poept.poept` and complete the login. It will output the cookies and also store them at less `~/.cache/poept.cookies.json`.
+
+
+### usage
 Here's an example of how to use PoePT to log in to the Poe chatbot and ask a question:
 
 - create connection with bot
-- login is ***needed*** every time but will only ask for code if you havent logged in before
-```python
-from poept import PoePT
-
-bot = PoePT(email=os.environ.get("POE_EMAIL"))
-
-```
 - Once you're logged in, you can ask a question to the chatbot of your choice and retrieve the result:
 
 ```python
@@ -80,8 +80,7 @@ bot.close()
 ## Env variables
 
 - POE_HEADLESS=true
-- POE_EMAIL=<your email>
-
+- POE_COOKIES=<base64 encoded cookies> otherwise cookies are read from "~/.cache/poept.cookies.json"
 ## Extra
 
 - status of client

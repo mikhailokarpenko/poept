@@ -17,6 +17,7 @@ import logging
 import json
 import base64
 from urllib.parse import urlparse
+import sys
 
 class BotNotFound(Exception):
     pass
@@ -32,13 +33,13 @@ logger = logging.getLogger(__name__)
 default_bot = "Assistant"
 website = "https://poe.com/"
 letters = ["ABCDEFGHIJKLMNOPQRSTUVWXYZ", "abcdefghijklmnopqrstuvwxyz"]
-email_area='input[type="email"]'
 code_area="input[class*=CodeInput"
 go_key='//button[text()="Go"]'
 log_key=f"//button[contains(translate(., '{letters[0]}', '{letters[-1]}' ), 'log')]"
 clear_key="button[class*=ChatBreak]"
 stop_button_selector="button[class*=ChatStopMessageButton]"
 button_css_selector = "button[class*=SendButton]"
+textarea_css_selector =  "textarea[class*='GrowingTextArea_textArea']"
 
 
 def to_markdown(element: WebElement) -> str:
@@ -54,11 +55,11 @@ class PoePT:
 
     def __init__(self,
             cookies: Optional[str] = os.environ.get("POE_COOKIES"),
-            email: Optional[str] = os.environ.get("POE_EMAIL"),
             headless: bool = os.environ.get("POE_HEADLESS", "true") == "true",
+            login_mode: bool = False
         ):
         chrome_options = Options()
-        if headless:
+        if headless or login_mode:
             chrome_options.add_argument("--headless")
             chrome_options.add_argument("--no-sandbox")
             chrome_options.add_argument("--disable-gpu")
@@ -75,6 +76,16 @@ class PoePT:
         self.driver = webdriver.Chrome(service=chrome_service, options=chrome_options)
         self.stat = "false"
 
+        if login_mode:
+            logger.info("Login mode enabled. Waiting for login completion...")
+            self.driver.get(website)
+            WebDriverWait(self.driver, 120).until(
+                EC.presence_of_element_located((By.CSS_SELECTOR, textarea_css_selector))
+            )
+            logger.info("Login detected. Saving cookies...")
+            self.save_cookies_on_exit()
+            return
+
         self.cookies = None
 
         if cookies is not None:
@@ -84,19 +95,11 @@ class PoePT:
         if self.cookies is None:
             self.cookies = self.read_cookies()
 
-        if self.cookies is None:
-            if email is None:
-                raise AuthenticationFailure("no cookies and email are set")
-            else:
-                self.login(email)
+        for _ in range(3):
+            if self.apply_cookies():
+                break
         else:
-            # i noticed that sometimes cookies are not applied from first run :facepalm:
-            # workaround
-            for _ in range(3):
-                if self.apply_cookies():
-                    break
-            else:
-                raise AuthenticationFailure("cookies wasn't applied after a few attempts")
+            raise AuthenticationFailure("cookies wasn't applied after a few attempts")
 
     def read_cookies(self):
         for cookies_file in [self.cookies_file_path, self.alternative_cookies_file_path]:
@@ -121,7 +124,7 @@ class PoePT:
         self.driver.refresh()
 
         try:
-            self.driver.find_element(By.CSS_SELECTOR, 'button[class*=ChatMessageSendButton_sendButton]')
+            self.driver.find_element(By.CSS_SELECTOR, textarea_css_selector)
             logger.info("Cookies were applied")
         except selenium.common.exceptions.NoSuchElementException as err:
             self.driver.save_screenshot(f"{__name__}-apply_cookies_failed.png")
@@ -205,22 +208,6 @@ class PoePT:
     def clearchat(self):
         click(self.driver, By.CSS_SELECTOR, clear_key)
 
-    def login(self, email: str):
-        self.driver.get(website)
-        self.driver.execute_script('window.scrollBy(0, 5);')
-
-        enter(self.driver, By.CSS_SELECTOR, email_area, email)
-        click(self.driver, By.XPATH, go_key)
-
-        code = input("Enter code: ")
-        enter(self.driver, By.CSS_SELECTOR, code_area, code)
-        click(self.driver, By.XPATH, log_key)
-
-        self.cookies = self.driver.get_cookies()
-        with open(self.cookies_file_path, "wb") as f:
-            json.dump(self.cookies, f)
-
-
     def _typein(self, element, text):
         js_code = """
 const element = arguments[0];
@@ -236,7 +223,7 @@ element.dispatchEvent(new KeyboardEvent('keyup', { bubbles: true }));
         self.driver.execute_script(f"window.location.href = '{website}{chat_id}';")
         element = WebDriverWait(self.driver, 60).until(
             EC.any_of(
-                EC.presence_of_element_located((By.CSS_SELECTOR, button_css_selector)),
+                EC.presence_of_element_located((By.CSS_SELECTOR, textarea_css_selector)),
                 EC.presence_of_element_located((By.CSS_SELECTOR, "h1[class*=StatusCodeError_statusCode]"))
             )
         )
@@ -263,7 +250,7 @@ element.dispatchEvent(new KeyboardEvent('keyup', { bubbles: true }));
         self.stat = "wait"
 
         input_area_element = WebDriverWait(self.driver, 10).until(
-            EC.presence_of_element_located((By.CSS_SELECTOR, "textarea[class*=TextArea]"))
+            EC.presence_of_element_located((By.CSS_SELECTOR, textarea_css_selector))
         )
 
         self._typein(input_area_element, prompt)
@@ -329,3 +316,15 @@ element.dispatchEvent(new KeyboardEvent('keyup', { bubbles: true }));
             return f'chat/{chat_part}'
         else:
             return None
+
+    def save_cookies_on_exit(self):
+        logger.info("Saving cookies...")
+        cookies = self.driver.get_cookies()
+        with open(self.cookies_file_path, 'w') as f:
+            json.dump(cookies, f)
+        print(json.dumps(cookies))
+        self.close()
+        sys.exit(0)
+
+if __name__ == "__main__":
+    PoePT(login_mode=True)
